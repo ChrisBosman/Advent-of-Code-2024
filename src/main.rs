@@ -1,22 +1,27 @@
-use std::{env, fs};
+use std::{env, fs, time::Instant};
+use download_input::download_input;
 use rand::Rng;
 use colored::*;
 mod days;
+mod download_input;
 
 const MAX_TERMINAL_LENGTH: usize = 100;
+const STARS: usize = 2;
+
 
 fn main() {
     print_begin_text();
     // Command line arguments
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        println!("Pass in the day number (1, 2, etc)\nOr pass in \"test\" + day number to run the test of that day\n\n");
+        println!("Pass in the day number (1, 2, etc)\nOr pass in \"test\" + day number to run the test of that day");
         return;
     }
-    let test_mode = args.contains(&"test".to_string());
+    let test_mode = args.contains(&"test".to_string()) || args.contains(&"t".to_string());
+    // if test_mode {env::set_var("RUST_BACKTRACE", "1");}
     let mut day: u8 = 0;
     for arg in args.iter().skip(1) {
-        if arg == "test" { continue; }
+        if arg == "test" || arg == "t" { continue; }
         day = arg.parse::<u8>().unwrap_or(0);
         break;
     } 
@@ -24,27 +29,33 @@ fn main() {
     { format!("inputs_tests/day{}.txt", day) } else { format!("inputs/day{}.txt", day) };
 
     // Read input
-    let input = match fs::read_to_string(path) {
+    let input = match fs::read_to_string(&path) {
         Ok(input) => {input},
-        Err(_) => {println!("{}",format!("Input for day {} was not found", day).bright_red());return;},
+        Err(_) => {
+            print!("{}\n{}",format!("Input for day {} was not found", day).bright_red(),"Fetching file online ...".truecolor(100, 100, 100));
+            download_input(day, "2024");
+            println!("{}"," Done".truecolor(100, 100, 100));
+            fs::read_to_string(&path).expect("Something gone wrong with downloading the file")
+        },
     };
  
     // Get the true solution of the test
-    let sol: (usize, usize) =
+    let sol: Vec<usize> =
     if test_mode {
         // Find the solution
-        let sols = fs::read_to_string("test_solutions.txt").unwrap();
-        let sols = sols.split("\n").collect::<Vec<&str>>();
+        let sols = fs::read_to_string("test_solutions.txt").expect("File {test_solutions.txt} not found");
+        let sols = sols.lines().collect::<Vec<&str>>();
         let sols = sols.get((day-1) as usize).unwrap_or(&"Day00:").split(&[':',','][..]).skip(1)
             .map(|s| s.trim().parse::<usize>().unwrap_or_else(|_| {println!(" {}, invalid number: \"{}\"", format!("Invalid solution for day {}",day).bright_red(),s); std::process::exit(0)}))
             .collect::<Vec<usize>>();
-        if sols.len() < 2 {
-            println!("{}, less than 2 solutions were provided", format!("Invalid solution for day {}",day).bright_red());
+        if sols.len() > 2 {
+            println!("{}, more than 2 solutions were provided", format!("Invalid solution for day {}",day).bright_red());
             return;
         }
-        (sols[0], sols[1])
-    } else {(0, 0)};
+        sols
+    } else {vec![]};
 
+    let now = Instant::now();    
     // Running the day
     let result = match day {
         0 => {println!("{}","Invalid day argument".bright_red());return;},
@@ -78,24 +89,28 @@ fn main() {
 
     // Validate the outputs
     if test_mode {
-    if sol.0 != result.0 {
-        println!("Part 1: ❌\n\t{}",format!("Expected: {}, got: {}", sol.0, result.0).truecolor(100,100,100));
+        if sol[0] != result.0 {
+            println!("Part 1: ❌\n\t{}",format!("Expected: {}, got: {}", sol[0], result.0).truecolor(100,100,100));
+        }else{
+            println!("Part 1: ✅");
+        }
+        if sol.len() > 1 {
+            if sol[1] != result.1 {
+                println!("Part 2: ❌\n\t{}",format!("Expected: {}, got: {}", sol[1], result.1).truecolor(100,100,100));
+            }else{
+                println!("Part 2: ✅");
+            }
+        }
     }else{
-        println!("Part 1: ✅");
+        // Print the results
+        println!("Part 1:\n  {}",format!("{}", result.0).truecolor(100,100,100));
+        println!("Part 2:\n  {}",format!("{}", result.1).truecolor(100,100,100));
     }
-    if sol.1 != result.1 {
-        println!("Part 2: ❌\n\t{}",format!("Expected: {}, got: {}", sol.1, result.1).truecolor(100,100,100));
-    }else{
-        println!("Part 2: ✅");
-    }
-}else{
-    // Print the results
-    println!("Part 1:\n  {}",format!("{}", result.0).truecolor(100,100,100));
-    println!("Part 2:\n  {}",format!("{}", result.1).truecolor(100,100,100));
-}
+    println!("\n{}",format!("Elapsed time {}s",now.elapsed().as_secs_f32()).truecolor(0, 100, 100));
 }
 
 fn print_begin_text() {
+    println!("\n{:⭐<2$}{:🌑<3$}","","",STARS,50-STARS);
     print_snow();
     let title = " ⁎⁑⁎⁎   ⁎⁑⁑⁎ Advent of Code 2024! ⁑⁑⁎ ⁎⁑⁎⁑⁎  ⁎";
     let spacing = (MAX_TERMINAL_LENGTH+title.chars().count())/2;
@@ -108,7 +123,7 @@ fn print_snow() {
     let char_arr = ['⁜','※','⁑','⁑','⁑','⁎','⁎','⁎','⁎','⁎','*','*'];
     let char_arr2 = ['⁂','⁂','⁑','⁎','⁎','⁎'];
     
-    for _ in 0..10 {
+    for _ in 0..6 {
         for _ in 0..MAX_TERMINAL_LENGTH{
             print!("{}",char_arr.get(rng.gen_range(0..200)).unwrap_or(&' '));
         }

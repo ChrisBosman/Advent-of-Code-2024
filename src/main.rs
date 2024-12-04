@@ -6,7 +6,7 @@ mod days;
 mod download_input;
 
 const MAX_TERMINAL_LENGTH: usize = 100;
-const STARS: usize = 6;
+const STARS: usize = 8;
 
 
 fn main() {

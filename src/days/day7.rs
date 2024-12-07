@@ -1,23 +1,23 @@
 use colored::Colorize; 
+use std::sync::mpsc::channel;
+use rayon::prelude::*;
  
 pub(crate) 
 fn run(input: String) -> (usize, usize){ 
     println!("{}","Day 7".bright_green().bold()); 
     let (test_vals, equations) = parse_input(input);
-    //* Part 1   
+    //* Part 1 & 2  
     // See which equations are true when either + or * is inserted between the numbers
-    let mut part1 = 0;
-    let mut part2 = 0;
-    for (answer, equation) in test_vals.iter().zip(equations.iter()){
-        if check_eq(answer, equation) {
-            part1 += answer;
-        }
-        if check_eq_part2(answer, equation) {
-            part2 += answer;
-        }
-    }
-    // println!("Was equation correct: {}", check_eq(&190, &equations[0]));
-    return (part1, part2); 
+    // For part two, it is with +,* and concat numbers together
+    let mut part1: Vec<usize> = vec![];
+    let mut part2: Vec<usize> = vec![];
+    let (sender, receiver) = channel();
+    test_vals.into_par_iter().zip(equations.par_iter()).for_each_with(sender,|s,(answer, equation)| {
+        s.send((if check_eq(&answer, equation) {answer} else {0},
+                if check_eq_part2(&answer, equation) {answer} else {0})).unwrap();
+    });
+    receiver.iter().for_each(|(p1, p2)| {part1.push(p1); part2.push(p2);});
+    return (part1.iter().sum(), part2.iter().sum()); 
 }
 
 fn parse_input(input: String) -> (Vec<usize>, Vec<Vec<usize>>) {

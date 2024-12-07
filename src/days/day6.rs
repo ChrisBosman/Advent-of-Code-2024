@@ -25,7 +25,7 @@ fn run(input: String) -> (usize, usize){
     // Follow the guard until he is out of bounds
     let mut has_visited = vec![vec![false; is_obstacle[0].len()]; is_obstacle.len()];
     has_visited[current_pos.0][current_pos.1] = true;
-    'outer: while current_pos.0 < is_obstacle.len() && current_pos.1 < is_obstacle[0].len() && current_pos.0 >= 0 && current_pos.1 >= 0 {
+    'outer: while current_pos.0 < is_obstacle.len() && current_pos.1 < is_obstacle[0].len() {
         // Scan till the next obstacle
         if let Some(mut next_index) = current_pos.2.get_next_index(&(current_pos.0, current_pos.1), is_obstacle.len() - 1) {
             while !is_obstacle[next_index.0][next_index.1] {
@@ -45,16 +45,8 @@ fn run(input: String) -> (usize, usize){
     return (part1, 0); 
 } 
 
-fn print_logic_matrix(matrix: &Vec<Vec<bool>>) {
-    for line in matrix {
-        for ch in line {
-            if *ch {print!("#")} else {print!(".")};
-        }
-        println!();
-    }
-}
-
 impl Direction {
+    #[allow(dead_code)]
     pub fn turn_left(&mut self) {
         match *self {
             Direction::Up => { *self = Direction::Left; },
@@ -79,6 +71,7 @@ impl Direction {
             Direction::Right => { let next = current_pos.1 + 1; if next > upper_bound {None} else { Some((current_pos.0, current_pos.1 + 1)) }},
         }    
     }
+    #[allow(dead_code)]
     fn turn_right_no_overwrite(&mut self) -> Direction{
         match *self {
             Direction::Up => { Direction::Right },
@@ -87,6 +80,7 @@ impl Direction {
             Direction::Left => { Direction::Up },
         }
     }
+    #[allow(dead_code)]
     fn turn_180_no_overwrite(&mut self) -> Direction{
         match *self {
             Direction::Up => { Direction::Down },

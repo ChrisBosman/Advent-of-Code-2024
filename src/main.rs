@@ -6,7 +6,7 @@ mod days;
 mod download_input;
 
 const MAX_TERMINAL_LENGTH: usize = 100;
-const STARS: usize = 19;
+const STARS: usize = 21;
 
 
 fn main() {
@@ -86,6 +86,7 @@ fn main() {
         25 => days::day25::run(input),
         _ => {println!("{}",format!("Day {} was not found", day).bright_red());return;},
     };
+    let elapsed_time = now.elapsed().as_secs_f32();
 
     // Validate the outputs
     if test_mode {
@@ -106,7 +107,7 @@ fn main() {
         println!("Part 1:\n  {}",format!("{}", result.0).truecolor(100,100,100));
         println!("Part 2:\n  {}",format!("{}", result.1).truecolor(100,100,100));
     }
-    println!("\n{}",format!("Elapsed time {}s",now.elapsed().as_secs_f32()).truecolor(0, 100, 100));
+    println!("\n{}",format!("Elapsed time {}s",elapsed_time).truecolor(0, 100, 100));
 }
 
 fn print_begin_text() {

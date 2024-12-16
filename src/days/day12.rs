@@ -206,8 +206,8 @@ fn flood(matrix: &mut Vec<Vec<bool>>, start: (usize,usize)) -> Vec<(usize,usize)
     return region;
 }
 
-#[derive(PartialEq,PartialOrd,Clone, Copy)]
-enum Direction {
+#[derive(PartialEq,PartialOrd,Clone, Copy, Debug)]
+pub enum Direction {
     Up = 0,
     Left = 1,
     Down = 2,
@@ -217,21 +217,21 @@ enum Direction {
 impl Direction {
     #[allow(dead_code)]
     /// Calculates the difference in angle steps in the counter clockwise direction
-    fn diff(&self, other: &Direction) -> u8{
+    pub fn diff(&self, other: &Direction) -> u8{
         let mut add: u8 = 0;
         if self > other {add += 4}
         *other as u8 + add - *self as u8
     }
 
     /// Rotate Counter-clockwise by count*90degrees
-    /// Count can not be higher than 252
-    fn rotate_ccw(&self, count: i8) -> Direction{
+    /// Count can not be higher than 127 or lower then -127
+    pub fn rotate_ccw(&self, count: i8) -> Direction{
         let new = *self as i8 + count;
         return Direction::from_number(new);
     }
     /// Rotate Counter-clockwise by count*90degrees
     /// Count can not be higher than 252
-    fn rotate_ccw_overwrite(&mut self, count: i8) {
+    pub fn rotate_ccw_overwrite(&mut self, count: i8) {
         let new = *self as i8 + count;
         *self = Direction::from_number(new);
     }
@@ -239,11 +239,18 @@ impl Direction {
     /// Gets the index of the cell 90deg Counter-clockwise <br>
     /// max values are exclusive
     /// Return the index if it is in [min,max)
-    fn get_index_ccw(&self, count: i8,i: usize, j: usize, max_i: usize, max_j: usize, min_i: usize, min_j: usize) -> Option<(usize,usize)>{
+    pub fn get_index_ccw(&self, count: i8,i: usize, j: usize, max_i: usize, max_j: usize, min_i: usize, min_j: usize) -> Option<(usize,usize)>{
         // See which direction to check
         let dir = self.rotate_ccw(count);
 
-        match dir {
+        dir.get_next_index(i, j, max_i, max_j, min_i, min_j)
+    }
+
+    /// Gets the next index<br>
+    /// max values are exclusive
+    /// Return the index if it is in [min,max)
+    pub fn get_next_index(&self, i: usize, j: usize, max_i: usize, max_j: usize, min_i: usize, min_j: usize) -> Option<(usize,usize)>{
+        match self {
             Direction::Up    if i > min_i   => {Some((i-1,j))},
             Direction::Left  if j > min_j   => {Some((i,j-1))},
             Direction::Down  if i+1 < max_i => {Some((i+1,j))},
@@ -252,7 +259,7 @@ impl Direction {
         }
     }
 
-    fn from_number(mut num: i8) -> Direction{
+    pub fn from_number(mut num: i8) -> Direction{
         while num > 3 { num -= 4; }
         while num < 0 { num += 4; }
         match num {
@@ -261,6 +268,15 @@ impl Direction {
             2 => {Direction::Down},
             3 => {Direction::Right},
             _ => {println!("{} Could not parse number to direction num: {num}","[from_number]".bright_red()); Direction::Up}
+        }
+    }
+
+    pub fn as_number(&self) -> usize{
+        match self {
+            Direction::Up    => 0,
+            Direction::Left  => 1,
+            Direction::Down  => 2,
+            Direction::Right => 3,
         }
     }
 }

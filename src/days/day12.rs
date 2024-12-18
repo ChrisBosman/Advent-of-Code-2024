@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::{self, Display}};
+use std::fmt::{self, Display};
 use colored::Colorize; 
  
 pub(crate) 

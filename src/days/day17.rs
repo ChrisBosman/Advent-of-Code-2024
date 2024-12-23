@@ -1,5 +1,5 @@
-use std::ops::{BitAnd, BitXorAssign};
-use colored::Colorize; 
+use std::ops::{BitAnd, BitXor, BitXorAssign};
+use colored::{ColoredString, Colorize}; 
 
 
 #[derive(Clone)]
@@ -7,8 +7,7 @@ struct AlgebraPart{
     operand: usize,
     register: Option<Box<AlgebraPart>>,
     second_register: Option<Box<AlgebraPart>>,
-    operation: Operations,
-    a0: bool,  // If this is set to true, that means this represents A(0), and all other fields should be ignored
+    operation: Operations,  // If this is set to A0, that means this represents A(0), and all other fields should be ignored
 }
 
 #[derive(Clone)]
@@ -18,7 +17,7 @@ struct Registers{
     c: usize,
 }
 
-#[derive(PartialEq,Clone)]
+#[derive(PartialEq,Clone,Debug)]
 enum Operations{
     Dv = 0,
     Bxl = 1,
@@ -26,6 +25,7 @@ enum Operations{
     Bxc = 4,
     Out = 5,
     Num = 8,
+    A0 = 9,
 }
 
 pub(crate) 
@@ -37,16 +37,21 @@ fn run(input: String) -> (usize, usize){
     print_number_arr(&output);
     //* Part2
     // Change the initial value of register A so that the program outputs its own instructions
-    let output0 = create_map(registers.clone(), &instructions);
+    let mut output0 = create_map(registers.clone(), &instructions);
     println!("Found map");
+    // for i in 0..output0.len(){
+    //     println!("{}",output0[i].debug());
+    //     output0[i].simplify();
+    //     println!("{}",output0[i].debug());
+    // }
     // One unknown (A0) one known (Output(0) = instructions(0)). Unfortunately % is a not invertible operation, so we can't just solve it.
-    for i in 0..10000000000000{
-        let output = output0[0].solve(i);
-        if output == instructions[0] as usize{
-            return (1, i)
-        }
-        if i % 100000000 == 0 {println!("Trying {}",i)}
-    }
+    // for i in 0..10000000000000{
+    //     let output = output0[0].solve(i);
+    //     if output == instructions[0] as usize{
+    //         return (1, i)
+    //     }
+    //     if i % 100000000 == 0 {println!("Trying {}",i)}
+    // }
 
     // let mut new_registers = registers.clone();
     // for i in 0..1000000000{
@@ -56,6 +61,13 @@ fn run(input: String) -> (usize, usize){
     //         return (1,i)
     //     }
     // }
+    
+    // Try a few values of A
+    let mut nr = registers.clone();
+    nr.a = 68;//64+4;
+    println!("A:{}, output {:?}",nr.a, execute_program(nr.clone(), &instructions));
+    println!("LHS: {}",((nr.a % 8).bitxor(4)));
+    println!("RHS: {}",nr.a/exp2((nr.a % 8).bitxor(1) as u8));
     return (1, 0); 
 } 
 
@@ -63,6 +75,7 @@ fn execute_program(registers: Registers, instructions: &Vec<u8>) -> Vec<u8>{
     let mut output = Vec::new();
     let mut registers = registers;
     let mut instr_ptr = 0;  // The instruction pointer
+    println!("Inst_ptr: {}",instr_ptr);
     while instr_ptr < instructions.len()-1{
         let operand = instructions[instr_ptr+1];
         match instructions[instr_ptr] {
@@ -89,18 +102,31 @@ fn execute_program(registers: Registers, instructions: &Vec<u8>) -> Vec<u8>{
 /// ### Creates a map from A0 to the output (more like a tree)
 /// Stops after 1 output, as it is enough to calculate a0, No its not......
 fn create_map(registers: Registers, instructions: &Vec<u8>) -> Vec<AlgebraPart>{
-    let a0 = AlgebraPart{a0: true,operand: 0, register: None, operation: Operations::Num, second_register: None};
+    let a0 = AlgebraPart{operand: 0, register: None, operation: Operations::A0, second_register: None};
     let mut output = Vec::new();
     let mut registers: [AlgebraPart;3] = [a0, AlgebraPart::new(registers.b),AlgebraPart::new(registers.c)];
     let mut instr_ptr = 0;  // The instruction pointer
+    let jumps = [true,true,true];  // What to do at the jumps   // A is A0/8 at the first (and potentially last) jump, so A0/8 != 0, A0 > 8, second: A0/64 -> A0 > 64, 3:A0>512
+    let mut jump_nr = 0;
     while instr_ptr < instructions.len()-1{
         let operand = instructions[instr_ptr+1];
+        
         match instructions[instr_ptr] {
             0 => adv_algebra(operand, &mut registers),
             1 => bxl_algebra(operand, &mut registers),
             2 => bst_algebra(operand, &mut registers),
             3 => {
-                    return output; // Can't handle jump statements
+                if output.len() < instructions.len() {  //? Only applicable for my data
+                    // Jump,
+                    let mut a = registers[0].clone();
+                    a.simplify();
+                    println!("Requirement: {}!=0",a.debug());
+                    instr_ptr = operand as usize;
+                } else{
+                    // output.push(registers[0].clone()); return output; // Can't handle jump statements
+                    jump_nr += 1;
+                }
+                
                 },
             4 => bxc_algebra(&mut registers),
             5 => output.push(out_algebra(operand, &registers)),
@@ -109,7 +135,7 @@ fn create_map(registers: Registers, instructions: &Vec<u8>) -> Vec<AlgebraPart>{
             val => {println!("Opcode is too large: {val}. Should not exceed 7.")},
         }
         instr_ptr += 2;
-        if output.len() == 1 {return output}
+        // if output.len() == 1 {return output}
     }
     return output;
 }
@@ -234,48 +260,66 @@ fn print_number_arr(output: &Vec<u8>){
 /// register A divided by (2^combo operand) <br>
 /// Result is stored in register C
 fn cdv_algebra(operand: u8, registers: &mut [AlgebraPart;3]){
-    registers[2] = AlgebraPart{a0: false, operand: operand as usize, register: Some(Box::new(registers[0].clone())), operation: Operations::Dv, second_register: None}
+    let val = get_combo_operand_algebra(operand, registers);
+    if val.operation == Operations::Num {
+        registers[2] = AlgebraPart{operand: val.operand, register: Some(Box::new(registers[0].clone())), operation: Operations::Dv, second_register: None};
+        return;
+    }
+    registers[2] = AlgebraPart{operand: 0, register: Some(Box::new(registers[0].clone())), operation: Operations::Dv, second_register: Some(Box::new(val))};
 }
 
 /// ### Division B <br>
 /// register A divided by (2^combo operand) <br>
 /// Result is stored in register B
 fn bdv_algebra(operand: u8, registers: &mut [AlgebraPart;3]){
-    registers[1] = AlgebraPart{a0: false, operand: operand as usize, register: Some(Box::new(registers[0].clone())), operation: Operations::Dv, second_register: None}
+    let val = get_combo_operand_algebra(operand, registers);
+    if val.operation == Operations::Num {
+        registers[1] = AlgebraPart{operand: val.operand, register: Some(Box::new(registers[0].clone())), operation: Operations::Dv, second_register: None};
+        return;
+    }
+    registers[1] = AlgebraPart{operand: 0, register: Some(Box::new(registers[0].clone())), operation: Operations::Dv, second_register: Some(Box::new(val))}
 }
 
 /// ### Output
 /// Outputs the combo value of the operand
 fn out_algebra(operand: u8, registers: &[AlgebraPart;3]) -> AlgebraPart{
     let val = get_combo_operand_algebra(operand, registers);
-    if val.operation == Operations::Num { return AlgebraPart{a0: false, operand: val.operand, register: None, operation: Operations::Out, second_register: None} }
-
-    return AlgebraPart{a0: false, operand: 0, register: Some(Box::new(val)), operation: Operations::Out, second_register: None};
+    if val.operation == Operations::Num {
+        // if val.a0 {return AlgebraPart{a0: true, operand: 0, register: None, operation: Operations::Out, second_register: None}}
+        return AlgebraPart{operand: val.operand, register: None, operation: Operations::Out, second_register: None}
+    }
+    return AlgebraPart{operand: 0, register: Some(Box::new(val)), operation: Operations::Out, second_register: None};
 }
 
 /// ### Bitwise XOR of B and C
 /// Calculate bitwise XOR with register B and register C, stores result in register B
 fn bxc_algebra(registers: &mut [AlgebraPart;3]){
-    registers[1] = AlgebraPart{a0: false, operand: 0, register: Some(Box::new(registers[1].clone())), operation: Operations::Bxc, second_register: Some(Box::new(registers[2].clone()))}
+    registers[1] = AlgebraPart{ operand: 0, register: Some(Box::new(registers[1].clone())), operation: Operations::Bxc, second_register: Some(Box::new(registers[2].clone()))}
 }
 
 /// ### Combo, mod 8
 /// Calculates the combo value of operand, takes the lowest 3 bits, and writes it to register B
 fn bst_algebra(operand: u8, registers: &mut [AlgebraPart;3]){
     registers[1] = out_algebra(operand, registers);
+    registers[1].operation = Operations::Bst;
 }
 
 /// ### Bitwise XOR of B and operand <br>
 /// Calculate bitwise XOR with register B and literal operand, stores result in register B
 fn bxl_algebra(operand: u8, registers: &mut [AlgebraPart;3]){
-    registers[1] = AlgebraPart{a0: false, operand: operand as usize, register: Some(Box::new(registers[1].clone())), operation: Operations::Bxl, second_register: None}
+    registers[1] = AlgebraPart{operand: operand as usize, register: Some(Box::new(registers[1].clone())), operation: Operations::Bxl, second_register: None}
 }
 
 /// ### Division A <br>
 /// register A divided by (2^combo operand) <br>
 /// Result is stored in register A
 fn adv_algebra(operand: u8, registers: &mut [AlgebraPart;3]){
-    registers[1] = AlgebraPart{a0: false, operand: operand as usize, register: Some(Box::new(registers[0].clone())), operation: Operations::Dv, second_register: None}
+    let val = get_combo_operand_algebra(operand, registers);
+    if val.operation == Operations::Num {
+        registers[0] = AlgebraPart{operand: val.operand, register: Some(Box::new(registers[0].clone())), operation: Operations::Dv, second_register: None};
+        return;
+    }
+    registers[0] = AlgebraPart{operand: 0, register: Some(Box::new(registers[0].clone())), operation: Operations::Dv, second_register: Some(Box::new(val))}
 }
 
 fn get_combo_operand_algebra(operand: u8, registers: &[AlgebraPart;3]) -> AlgebraPart {
@@ -294,25 +338,151 @@ fn get_combo_operand_algebra(operand: u8, registers: &[AlgebraPart;3]) -> Algebr
 
 impl AlgebraPart {
     fn new(val: usize) -> AlgebraPart {
-        AlgebraPart{a0: false, operand: val, register: None, operation: Operations::Num, second_register: None}
+        AlgebraPart{operand: val, register: None, operation: Operations::Num, second_register: None}
     }
 
-    // Solve for some a1
-    fn solve(&self, a1: usize) -> usize {
+    // Solve for some a0
+    fn solve(&self, a0: usize) -> usize {
         match self.operation {
             Operations::Num => self.operand,
-            Operations::Dv => self.register.as_ref().unwrap().solve(a1) / exp2(self.operand as u8),
-            Operations::Bxl => self.register.as_ref().unwrap().solve(a1) ^ self.operand,
-            Operations::Bxc => self.register.as_ref().unwrap().solve(a1) ^ self.second_register.as_ref().unwrap().solve(a1),
-            Operations::Out => {
+            Operations::Dv => 
+                if let Some(reg2) = self.second_register.as_ref() {
+                    self.register.as_ref().unwrap().solve(a0) / exp2(reg2.solve(a0) as u8)
+                } else {
+                    self.register.as_ref().unwrap().solve(a0) / exp2(self.operand as u8)
+                },
+            Operations::Bxl => self.register.as_ref().unwrap().solve(a0) ^ self.operand,
+            Operations::Bxc => self.register.as_ref().unwrap().solve(a0) ^ self.second_register.as_ref().unwrap().solve(a0),
+            Operations::Out => 
                 if let Some(register) =  self.register.as_ref(){
-                    register.solve(a1).bitand(7)
+                    register.solve(a0).bitand(7)
                 }else{
                     self.operand.bitand(7)
+                },
+            Operations::Bst => 
+                if let Some(register) =  self.register.as_ref(){
+                    register.solve(a0).bitand(7)
+                }else{
+                    self.operand.bitand(7)
+                },
+            Operations::A0 => a0,
+        }
+    }
+
+    /// Implement debug for struct
+    fn debug(&self) -> ColoredString {
+        match self.operation {
+            Operations::Num => format!("{}",self.operand).truecolor(100, 100, 100),
+            Operations::Dv => 
+                if let Some(reg2) = self.second_register.as_ref() {
+                    format!("({}/exp2({}))",self.register.as_ref().unwrap().debug(),reg2.debug()).truecolor(10, 130, 10)
+                } else {
+                    format!("({}/{})",self.register.as_ref().unwrap().debug(),exp2(self.operand as u8)).truecolor(10, 130, 10)
+                },
+            Operations::Bxl => format!("({} ^ {})",self.register.as_ref().unwrap().debug(),self.operand).truecolor(250, 130, 10),
+            Operations::Bxc => format!("({} ^ {})",self.register.as_ref().unwrap().debug(),self.second_register.as_ref().unwrap().debug()).truecolor(250, 130, 10),
+            Operations::Out => {
+                if let Some(register) =  self.register.as_ref(){
+                    format!("{} % 8",register.debug()).truecolor(140, 10, 30)
+                }else{
+                    format!("{} % 8",self.operand).truecolor(140, 10, 30)
                 }
             },
-            Operations::Bst => self.register.as_ref().unwrap().solve(a1).bitand(7),
+            Operations::Bst => format!("({} % 8)",self.register.as_ref().unwrap().debug()).truecolor(140, 10, 10),
+            Operations::A0 => format!("A(0)").truecolor(140, 0, 130),
         }
+    }
+
+    fn simplify(&mut self){
+        match self.operation {
+            Operations::Num => {},  // Nothing to do here
+            Operations::Dv => {  // The only thing we can do is simplify if they are both numbers
+                if let Some(reg2) = self.second_register.as_mut() {
+                    self.register.as_mut().unwrap().simplify();
+                    reg2.simplify();
+                    if reg2.operation == Operations::Num {
+                        self.operand = reg2.operand;
+                        self.second_register = None;
+                        // If the reg1 could also be simplified, than convert to num block
+                        let reg1 = self.register.as_ref().unwrap();
+                        if reg1.operation == Operations::Num {
+                            self.operation = Operations::Num;
+                            self.operand = reg1.operand / exp2(self.operand as u8);
+                            self.register = None;
+                        }
+                    }
+                } else {
+                    // reg1/exp2(operand) 
+                    self.register.as_mut().unwrap().simplify();
+                    // If the reg1 could be simplified, than convert to num block
+                    let reg1 = self.register.as_ref().unwrap();
+                    if reg1.operation == Operations::Num {
+                        self.operation = Operations::Num;
+                        self.operand = reg1.operand / exp2(self.operand as u8);
+                        self.register = None;
+                    }
+                }
+                // Merge with the Dv below it (note it is A/exp2(num)/exp2(num) = A/exp2(num+num)
+                while self.register.as_mut().unwrap().second_register.is_none() && self.register.as_mut().unwrap().operation == Operations::Dv && self.register.as_ref().unwrap().second_register.is_none() {
+                        // They are both numbers
+                        self.operand += self.register.as_ref().unwrap().operand;
+                        self.register = self.register.as_mut().unwrap().register.take();
+                }
+            },
+            Operations::Bxl => {
+                self.register.as_mut().unwrap().simplify();
+                // If it is a number
+                if self.register.as_ref().unwrap().operation == Operations::Num {
+                    self.operation = Operations::Num;
+                    self.operand = self.register.as_ref().unwrap().operand.bitxor(self.operand);
+                    self.register = None;
+                }else{
+                    // See if there is a bitxor after, then we can simplify   (4 ^ 2 = 6)
+                    if self.register.as_mut().unwrap().operation == Operations::Bxl {
+                        self.operand = self.register.as_ref().unwrap().operand.bitxor(self.operand);
+                        // Remove the intermediate AlgebraPart
+                        self.register = self.register.as_mut().unwrap().register.take();
+                    }
+                }
+
+            },
+            Operations::Bxc => {
+                // If the second or first register is a number, we can simplify to a Bxl operation
+                self.register.as_mut().unwrap().simplify();
+                if let Some(reg2) = self.second_register.as_mut() {
+                    reg2.simplify();
+                    if reg2.operation == Operations::Num {
+                        self.operand = reg2.operand;
+                        self.second_register = None;
+                        self.operation = Operations::Bxl;
+                    } else {
+                        if self.register.as_ref().unwrap().operation == Operations::Num {
+                            self.operand = self.register.as_ref().unwrap().operand;
+                            self.register = self.second_register.take();
+                            self.operation = Operations::Bxl;
+                        }
+                    }
+                }
+                // Now it is converted to bxl if any part was a number
+                // Convert to number if possible
+                if self.second_register.is_none() && self.register.as_ref().unwrap().operation == Operations::Num {
+                    self.operation = Operations::Num;
+                    self.operand = self.register.as_ref().unwrap().operand.bitxor(self.operand);
+                    self.register = None;
+                }
+            },
+            Operations::Out | Operations::Bst => {
+                // If the register is a number, we can simplify to a number
+                self.register.as_mut().unwrap().simplify();
+                if self.register.as_ref().unwrap().operation == Operations::Num {
+                    self.operation = Operations::Num;
+                    self.operand = self.register.as_ref().unwrap().operand.bitand(7);
+                    self.register = None;
+                }
+            },                
+            Operations::A0 => {},  // Nothing to do here
+        }
+        
     }
 }
 
@@ -339,5 +509,8 @@ C = A/2^num
 
 Simplifications:
     num % 8 % 8 = num % 8
+    num ^ num = 0
+    num ^ 4 ^ 2 = num ^ 6
+    num ^ 5 ^ 1 = num ^ 4
 
 */

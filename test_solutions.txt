@@ -16,10 +16,10 @@ Day15: 10092
 Day16: 7036,45
 Day17: 1,117440
 Day18: 22, 6
-Day19:
+Day19: 6
 Day20:
 Day21:
 Day22:
-Day23:
+Day23: 7
 Day24:
 Day25:
